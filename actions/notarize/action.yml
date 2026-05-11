@@ -43,22 +43,53 @@ runs:
         set -e
 
         echo "$OUT" | tee "$RUNNER_TEMP/notarize.json"
-        rm -f "$KEY_PATH"
+
+        emit_failure_summary() {
+          local submission_id="$1"
+          local status_label="$2"
+          local log_file="$RUNNER_TEMP/notarize-log-${submission_id}.json"
+          xcrun notarytool log "$submission_id" \
+            --key "$KEY_PATH" \
+            --key-id "${{ inputs.api-key-id }}" \
+            --issuer "${{ inputs.api-issuer-id }}" \
+            "$log_file" 2>/dev/null || true
+          {
+            echo "## Notarization failed"
+            echo ""
+            echo "- **Submission ID:** \`$submission_id\`"
+            echo "- **Status:** \`$status_label\`"
+            echo ""
+            if [ -s "$log_file" ]; then
+              echo "### notarytool log"
+              echo ""
+              echo '```json'
+              cat "$log_file"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+        }
 
         if [ "$STATUS" -ne 0 ]; then
           SUBMISSION_ID=$(echo "$OUT" | jq -r '.id // empty')
           if [ -n "$SUBMISSION_ID" ]; then
             echo "::error::Notarization failed. Submission: $SUBMISSION_ID"
-            xcrun notarytool log "$SUBMISSION_ID" \
-              --key "$RUNNER_TEMP/asc-key.p8" 2>/dev/null \
-              --key-id "${{ inputs.api-key-id }}" \
-              --issuer "${{ inputs.api-issuer-id }}" || true
+            emit_failure_summary "$SUBMISSION_ID" "$(echo "$OUT" | jq -r '.status // "unknown"')"
           fi
+          rm -f "$KEY_PATH"
           exit 1
         fi
 
         FINAL_STATUS=$(echo "$OUT" | jq -r '.status')
         if [ "$FINAL_STATUS" != "Accepted" ]; then
-          echo "::error::Notarization status was $FINAL_STATUS"
+          SUBMISSION_ID=$(echo "$OUT" | jq -r '.id // empty')
+          if [ -n "$SUBMISSION_ID" ]; then
+            echo "::error::Notarization status was $FINAL_STATUS. Submission: $SUBMISSION_ID"
+            emit_failure_summary "$SUBMISSION_ID" "$FINAL_STATUS"
+          else
+            echo "::error::Notarization status was $FINAL_STATUS"
+          fi
+          rm -f "$KEY_PATH"
           exit 1
         fi
+
+        rm -f "$KEY_PATH"
