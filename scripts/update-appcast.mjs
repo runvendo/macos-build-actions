@@ -63,13 +63,17 @@ function emptyAppcast(title) {
 }
 
 function prependItem(xml, it) {
+  // Any literal "]]>" inside release notes would close the CDATA early and let
+  // attacker-controlled content escape into the appcast. Split it across two
+  // CDATA sections using the standard recipe.
+  const safeDescription = it.description.replace(/\]\]>/g, "]]]]><![CDATA[>");
   const item = `    <item>
       <title>${escapeXml(it.title)}</title>
       <pubDate>${escapeXml(it.pubDate)}</pubDate>
       <sparkle:version>${escapeXml(it.version)}</sparkle:version>
       <sparkle:shortVersionString>${escapeXml(it.shortVersionString)}</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>${escapeXml(it.minOsVersion)}</sparkle:minimumSystemVersion>
-      ${it.description ? `<description><![CDATA[${it.description}]]></description>` : ""}
+      ${it.description ? `<description><![CDATA[${safeDescription}]]></description>` : ""}
       <enclosure url="${escapeXml(it.url)}" sparkle:edSignature="${escapeXml(it.signature)}" length="${escapeXml(String(it.length))}" type="application/octet-stream"/>
     </item>
 `;
