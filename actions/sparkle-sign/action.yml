@@ -12,6 +12,10 @@ inputs:
     description: Sparkle release version whose sign_update binary to use. Pin to a known-good version.
     required: false
     default: "2.6.4"
+  sparkle-sha256:
+    description: SHA-256 of the Sparkle release tarball. Default is the official hash for the default sparkle-version.
+    required: false
+    default: "50612a06038abc931f16011d7903b8326a362c1074dabccb718404ce8e585f0b"
 
 outputs:
   signature:
@@ -30,6 +34,7 @@ runs:
         ARTIFACT_PATH: ${{ inputs.artifact-path }}
         ED_PRIVATE_KEY: ${{ inputs.ed-private-key }}
         SPARKLE_VERSION: ${{ inputs.sparkle-version }}
+        SPARKLE_SHA256: ${{ inputs.sparkle-sha256 }}
       run: |
         set -euo pipefail
         ARTIFACT="$ARTIFACT_PATH"
@@ -39,6 +44,7 @@ runs:
         curl -fsSL \
           "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
           -o "$TARBALL"
+        echo "$SPARKLE_SHA256  $TARBALL" | shasum -a 256 -c -
         mkdir -p "$EXTRACT"
         tar -xJf "$TARBALL" -C "$EXTRACT"
 
