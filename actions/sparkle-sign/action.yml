@@ -1,0 +1,69 @@
+name: Sign Sparkle update
+description: Signs a release artifact with Sparkle's sign_update tool using a per-app EdDSA private key. Outputs the base64 signature and byte length for inclusion in the appcast.
+
+inputs:
+  artifact-path:
+    description: Path to the .dmg or .zip the user will download.
+    required: true
+  ed-private-key:
+    description: Sparkle EdDSA private key (the contents of the file produced by Sparkle's generate_keys; typically a single line of base64).
+    required: true
+  sparkle-version:
+    description: Sparkle release version whose sign_update binary to use. Pin to a known-good version.
+    required: false
+    default: "2.6.4"
+
+outputs:
+  signature:
+    description: Base64-encoded EdDSA signature suitable for sparkle:edSignature.
+    value: ${{ steps.sign.outputs.signature }}
+  length:
+    description: Artifact size in bytes for the appcast enclosure length attribute.
+    value: ${{ steps.sign.outputs.length }}
+
+runs:
+  using: composite
+  steps:
+    - id: sign
+      shell: bash
+      run: |
+        set -euo pipefail
+        ARTIFACT="${{ inputs.artifact-path }}"
+        SPARKLE_VERSION="${{ inputs.sparkle-version }}"
+        TARBALL="$RUNNER_TEMP/sparkle.tar.xz"
+        EXTRACT="$RUNNER_TEMP/sparkle"
+
+        curl -fsSL \
+          "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
+          -o "$TARBALL"
+        mkdir -p "$EXTRACT"
+        tar -xJf "$TARBALL" -C "$EXTRACT"
+
+        # The bin/sign_update binary lives at the root of the tarball.
+        SIGN_UPDATE="$EXTRACT/bin/sign_update"
+        if [ ! -x "$SIGN_UPDATE" ]; then
+          SIGN_UPDATE=$(find "$EXTRACT" -name sign_update -type f -perm +111 | head -1)
+        fi
+
+        KEY_PATH="$RUNNER_TEMP/sparkle-ed.key"
+        printf '%s' "${{ inputs.ed-private-key }}" > "$KEY_PATH"
+        chmod 600 "$KEY_PATH"
+
+        # sign_update -f <key-file> <artifact> emits something like:
+        #   sparkle:edSignature="..." length="12345"
+        OUT=$("$SIGN_UPDATE" -f "$KEY_PATH" "$ARTIFACT")
+        echo "$OUT"
+
+        SIG=$(echo "$OUT" | sed -nE 's/.*edSignature="([^"]+)".*/\1/p')
+        LEN=$(echo "$OUT" | sed -nE 's/.*length="([0-9]+)".*/\1/p')
+
+        if [ -z "$SIG" ] || [ -z "$LEN" ]; then
+          echo "::error::Failed to parse sign_update output"
+          exit 1
+        fi
+
+        rm -f "$KEY_PATH"
+
+        echo "::add-mask::$SIG"
+        echo "signature=$SIG" >> "$GITHUB_OUTPUT"
+        echo "length=$LEN" >> "$GITHUB_OUTPUT"
