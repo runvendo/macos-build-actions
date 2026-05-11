@@ -1,0 +1,50 @@
+name: Import Developer ID cert
+description: Imports a base64-encoded Developer ID Application .p12 into an ephemeral keychain. Outputs the keychain path so later steps can sign against it. Cleanup is the caller's responsibility (use the cleanup-keychain action).
+
+inputs:
+  cert-p12-base64:
+    description: Base64-encoded .p12 file contents.
+    required: true
+  cert-password:
+    description: Password used when the .p12 was exported.
+    required: true
+  keychain-password:
+    description: Ephemeral password used for the new keychain. Generated if omitted.
+    required: false
+
+outputs:
+  keychain-path:
+    description: Absolute path to the ephemeral keychain.
+    value: ${{ steps.import.outputs.keychain-path }}
+
+runs:
+  using: composite
+  steps:
+    - id: import
+      shell: bash
+      run: |
+        set -euo pipefail
+        KEYCHAIN_PASSWORD="${{ inputs.keychain-password }}"
+        if [ -z "$KEYCHAIN_PASSWORD" ]; then
+          KEYCHAIN_PASSWORD=$(uuidgen)
+        fi
+        KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+        CERT_PATH="$RUNNER_TEMP/cert.p12"
+
+        echo "::add-mask::$KEYCHAIN_PASSWORD"
+        echo "${{ inputs.cert-p12-base64 }}" | base64 --decode > "$CERT_PATH"
+
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security import "$CERT_PATH" \
+          -P "${{ inputs.cert-password }}" \
+          -A -t cert -f pkcs12 \
+          -k "$KEYCHAIN_PATH"
+        security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+        security set-key-partition-list \
+          -S apple-tool:,apple:,codesign: \
+          -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+        rm -f "$CERT_PATH"
+        echo "keychain-path=$KEYCHAIN_PATH" >> "$GITHUB_OUTPUT"
