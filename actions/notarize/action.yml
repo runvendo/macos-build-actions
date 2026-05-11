@@ -19,12 +19,17 @@ runs:
   using: composite
   steps:
     - shell: bash
+      env:
+        ARTIFACT_PATH: ${{ inputs.artifact-path }}
+        API_KEY_B64: ${{ inputs.api-key-p8-base64 }}
+        API_KEY_ID: ${{ inputs.api-key-id }}
+        API_ISSUER_ID: ${{ inputs.api-issuer-id }}
       run: |
         set -euo pipefail
-        ARTIFACT="${{ inputs.artifact-path }}"
+        ARTIFACT="$ARTIFACT_PATH"
         KEY_PATH="$RUNNER_TEMP/asc-key.p8"
 
-        echo "${{ inputs.api-key-p8-base64 }}" | base64 --decode > "$KEY_PATH"
+        printf '%s' "$API_KEY_B64" | base64 --decode > "$KEY_PATH"
 
         # notarytool needs a zip if the artifact is a .app; .dmg submits directly.
         SUBMIT_PATH="$ARTIFACT"
@@ -36,8 +41,8 @@ runs:
         set +e
         OUT=$(xcrun notarytool submit "$SUBMIT_PATH" \
           --key "$KEY_PATH" \
-          --key-id "${{ inputs.api-key-id }}" \
-          --issuer "${{ inputs.api-issuer-id }}" \
+          --key-id "$API_KEY_ID" \
+          --issuer "$API_ISSUER_ID" \
           --wait --output-format json)
         STATUS=$?
         set -e
@@ -50,8 +55,8 @@ runs:
           local log_file="$RUNNER_TEMP/notarize-log-${submission_id}.json"
           xcrun notarytool log "$submission_id" \
             --key "$KEY_PATH" \
-            --key-id "${{ inputs.api-key-id }}" \
-            --issuer "${{ inputs.api-issuer-id }}" \
+            --key-id "$API_KEY_ID" \
+            --issuer "$API_ISSUER_ID" \
             "$log_file" 2>/dev/null || true
           {
             echo "## Notarization failed"

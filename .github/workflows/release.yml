@@ -72,16 +72,19 @@ jobs:
 
       - name: Audit Sparkle public key
         shell: bash
+        env:
+          APP_SLUG: ${{ inputs.app-slug }}
+          SPARKLE_PUB: ${{ inputs.sparkle-public-key }}
         run: |
           {
             echo "## Sparkle public key (audit)"
             echo ""
-            echo "App slug: \`${{ inputs.app-slug }}\`"
-            echo "Public EdDSA key: \`${{ inputs.sparkle-public-key }}\`"
+            echo "App slug: \`$APP_SLUG\`"
+            echo "Public EdDSA key: \`$SPARKLE_PUB\`"
             echo ""
             echo "If this does not match \`SUPublicEDKey\` in the app's Info.plist, the resulting Sparkle update will be rejected by installed clients."
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "sparkle-public-key=${{ inputs.sparkle-public-key }}"
+          echo "sparkle-public-key=$SPARKLE_PUB"
 
       - uses: runvendo/macos-build-actions/actions/import-cert@v1
         id: keychain
@@ -92,19 +95,22 @@ jobs:
       - name: Archive
         shell: bash
         env:
+          SCHEME: ${{ inputs.scheme }}
           MARKETING_VERSION: ${{ steps.version.outputs.marketing }}
           CURRENT_PROJECT_VERSION: ${{ steps.version.outputs.build }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEYCHAIN_PATH: ${{ steps.keychain.outputs.keychain-path }}
         run: |
           set -euo pipefail
           xcodebuild \
-            -scheme "${{ inputs.scheme }}" \
+            -scheme "$SCHEME" \
             -configuration Release \
             -archivePath "$RUNNER_TEMP/app.xcarchive" \
             -destination 'generic/platform=macOS' \
             CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_IDENTITY="Developer ID Application" \
-            OTHER_CODE_SIGN_FLAGS="--keychain ${{ steps.keychain.outputs.keychain-path }}" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
             MARKETING_VERSION="$MARKETING_VERSION" \
             CURRENT_PROJECT_VERSION="$CURRENT_PROJECT_VERSION" \
             archive
@@ -112,6 +118,8 @@ jobs:
       - name: Export archive
         id: export
         shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/export.plist" <<EOF
@@ -121,7 +129,7 @@ jobs:
           <dict>
             <key>method</key><string>developer-id</string>
             <key>signingStyle</key><string>manual</string>
-            <key>teamID</key><string>${{ secrets.APPLE_TEAM_ID }}</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
           </dict>
           </plist>
           EOF
@@ -149,31 +157,43 @@ jobs:
 
       - name: Staple
         shell: bash
-        run: xcrun stapler staple "${{ steps.export.outputs.app-path }}"
+        env:
+          APP_PATH: ${{ steps.export.outputs.app-path }}
+        run: xcrun stapler staple "$APP_PATH"
 
       - name: Create DMG
         id: dmg
         shell: bash
+        env:
+          APP_SLUG: ${{ inputs.app-slug }}
+          APP_NAME: ${{ inputs.app-name }}
+          MARKETING_VERSION: ${{ steps.version.outputs.marketing }}
+          APP_PATH: ${{ steps.export.outputs.app-path }}
+          APP_BASENAME: ${{ steps.export.outputs.app-basename }}
         run: |
           set -euo pipefail
           brew install create-dmg
-          DMG_NAME="${{ inputs.app-slug }}-${{ steps.version.outputs.marketing }}.dmg"
+          DMG_NAME="${APP_SLUG}-${MARKETING_VERSION}.dmg"
           DMG_PATH="$RUNNER_TEMP/$DMG_NAME"
           create-dmg \
-            --volname "${{ inputs.app-name }}" \
-            --hide-extension "${{ steps.export.outputs.app-basename }}" \
+            --volname "$APP_NAME" \
+            --hide-extension "$APP_BASENAME" \
             --app-drop-link 400 200 \
             "$DMG_PATH" \
-            "${{ steps.export.outputs.app-path }}"
+            "$APP_PATH"
           echo "path=$DMG_PATH" >> "$GITHUB_OUTPUT"
           echo "name=$DMG_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Sign DMG
         shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEYCHAIN_PATH: ${{ steps.keychain.outputs.keychain-path }}
+          DMG_PATH: ${{ steps.dmg.outputs.path }}
         run: |
-          codesign --sign "Developer ID Application: ${{ secrets.APPLE_TEAM_ID }}" \
-            --keychain "${{ steps.keychain.outputs.keychain-path }}" \
-            "${{ steps.dmg.outputs.path }}"
+          codesign --sign "Developer ID Application: $APPLE_TEAM_ID" \
+            --keychain "$KEYCHAIN_PATH" \
+            "$DMG_PATH"
 
       - name: Notarize DMG
         uses: runvendo/macos-build-actions/actions/notarize@v1
@@ -185,7 +205,9 @@ jobs:
 
       - name: Staple DMG
         shell: bash
-        run: xcrun stapler staple "${{ steps.dmg.outputs.path }}"
+        env:
+          DMG_PATH: ${{ steps.dmg.outputs.path }}
+        run: xcrun stapler staple "$DMG_PATH"
 
       - name: Sparkle sign
         id: sparkle
@@ -198,15 +220,17 @@ jobs:
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
+          DMG_PATH: ${{ steps.dmg.outputs.path }}
+          DMG_NAME: ${{ steps.dmg.outputs.name }}
         shell: bash
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
           gh release view "$TAG" >/dev/null 2>&1 \
             || gh release create "$TAG" --title "$TAG" --notes "Automated release"
-          gh release upload "$TAG" "${{ steps.dmg.outputs.path }}" --clobber
+          gh release upload "$TAG" "$DMG_PATH" --clobber
           DMG_URL=$(gh release view "$TAG" --json assets \
-            --jq '.assets[] | select(.name == "${{ steps.dmg.outputs.name }}") | .url')
+            --jq ".assets[] | select(.name == \"$DMG_NAME\") | .url")
           echo "dmg-url=$DMG_URL" >> "$GITHUB_OUTPUT"
 
       - name: Compute RFC 822 pub-date
@@ -236,6 +260,8 @@ jobs:
       - name: Cleanup
         if: always()
         shell: bash
+        env:
+          KEYCHAIN_PATH: ${{ steps.keychain.outputs.keychain-path }}
         run: |
-          security delete-keychain "${{ steps.keychain.outputs.keychain-path }}" || true
+          security delete-keychain "$KEYCHAIN_PATH" || true
           rm -f "$RUNNER_TEMP/asc-key.p8" "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/sparkle-ed.key"

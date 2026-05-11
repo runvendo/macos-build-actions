@@ -26,10 +26,13 @@ runs:
   steps:
     - id: sign
       shell: bash
+      env:
+        ARTIFACT_PATH: ${{ inputs.artifact-path }}
+        ED_PRIVATE_KEY: ${{ inputs.ed-private-key }}
+        SPARKLE_VERSION: ${{ inputs.sparkle-version }}
       run: |
         set -euo pipefail
-        ARTIFACT="${{ inputs.artifact-path }}"
-        SPARKLE_VERSION="${{ inputs.sparkle-version }}"
+        ARTIFACT="$ARTIFACT_PATH"
         TARBALL="$RUNNER_TEMP/sparkle.tar.xz"
         EXTRACT="$RUNNER_TEMP/sparkle"
 
@@ -46,7 +49,7 @@ runs:
         fi
 
         KEY_PATH="$RUNNER_TEMP/sparkle-ed.key"
-        printf '%s' "${{ inputs.ed-private-key }}" > "$KEY_PATH"
+        printf '%s' "$ED_PRIVATE_KEY" > "$KEY_PATH"
         chmod 600 "$KEY_PATH"
 
         # sign_update -f <key-file> <artifact> emits something like:
