@@ -70,6 +70,19 @@ jobs:
           echo "marketing=$VERSION" >> "$GITHUB_OUTPUT"
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
 
+      - name: Audit Sparkle public key
+        shell: bash
+        run: |
+          {
+            echo "## Sparkle public key (audit)"
+            echo ""
+            echo "App slug: \`${{ inputs.app-slug }}\`"
+            echo "Public EdDSA key: \`${{ inputs.sparkle-public-key }}\`"
+            echo ""
+            echo "If this does not match \`SUPublicEDKey\` in the app's Info.plist, the resulting Sparkle update will be rejected by installed clients."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "sparkle-public-key=${{ inputs.sparkle-public-key }}"
+
       - uses: runvendo/macos-build-actions/actions/import-cert@v1
         id: keychain
         with:
