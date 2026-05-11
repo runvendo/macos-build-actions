@@ -50,15 +50,30 @@ runs:
         APPCAST_R2_ACCESS_KEY_ID: ${{ inputs.r2-access-key-id }}
         APPCAST_R2_SECRET_ACCESS_KEY: ${{ inputs.r2-secret-access-key }}
         APPCAST_R2_ACCOUNT_ID: ${{ inputs.r2-account-id }}
+        SLUG: ${{ inputs.slug }}
+        VERSION: ${{ inputs.version }}
+        BUILD_NUMBER: ${{ inputs.build-number }}
+        MIN_OS_VERSION: ${{ inputs.min-os-version }}
+        DMG_URL: ${{ inputs.dmg-url }}
+        SPARKLE_SIGNATURE: ${{ inputs.sparkle-signature }}
+        LENGTH: ${{ inputs.length }}
+        PUB_DATE: ${{ inputs.pub-date }}
+        TITLE: ${{ inputs.title }}
+        RELEASE_NOTES_PATH: ${{ inputs.release-notes-path }}
       run: |
-        node "${{ github.action_path }}/../../scripts/update-appcast.mjs" \
-          --slug "${{ inputs.slug }}" \
-          --version "${{ inputs.version }}" \
-          --build-number "${{ inputs.build-number }}" \
-          --min-os-version "${{ inputs.min-os-version }}" \
-          --dmg-url "${{ inputs.dmg-url }}" \
-          --sparkle-signature "${{ inputs.sparkle-signature }}" \
-          --length "${{ inputs.length }}" \
-          --pub-date "${{ inputs.pub-date }}" \
-          --title "${{ inputs.title }}" \
-          ${{ inputs.release-notes-path && format('--release-notes-path "{0}"', inputs.release-notes-path) || '' }}
+        set -euo pipefail
+        args=(
+          --slug "$SLUG"
+          --version "$VERSION"
+          --build-number "$BUILD_NUMBER"
+          --min-os-version "$MIN_OS_VERSION"
+          --dmg-url "$DMG_URL"
+          --sparkle-signature "$SPARKLE_SIGNATURE"
+          --length "$LENGTH"
+          --pub-date "$PUB_DATE"
+          --title "$TITLE"
+        )
+        if [ -n "$RELEASE_NOTES_PATH" ]; then
+          args+=(--release-notes-path "$RELEASE_NOTES_PATH")
+        fi
+        node "${{ github.action_path }}/../../scripts/update-appcast.mjs" "${args[@]}"
