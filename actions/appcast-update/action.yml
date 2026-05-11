@@ -1,0 +1,64 @@
+name: Update appcast in R2
+description: Atomically updates <slug>/appcast.xml in the vendo-appcasts R2 bucket with a new release entry. Runs the bundled update-appcast.mjs script which performs AWS SigV4 against the R2 S3 endpoint.
+
+inputs:
+  slug:
+    description: App slug — the R2 key prefix and URL path segment.
+    required: true
+  version:
+    description: Marketing version (e.g. 1.2.3).
+    required: true
+  build-number:
+    description: CFBundleVersion (e.g. 42).
+    required: true
+  min-os-version:
+    description: Minimum macOS version (e.g. 13.0).
+    required: true
+  dmg-url:
+    description: Public URL of the DMG (usually the GitHub Release asset URL).
+    required: true
+  sparkle-signature:
+    description: EdDSA signature from the sparkle-sign action.
+    required: true
+  length:
+    description: Byte length of the DMG.
+    required: true
+  pub-date:
+    description: RFC 822 date string. Use $(date -R) at call time.
+    required: true
+  title:
+    description: App display title for the channel title (only used when creating the first entry).
+    required: true
+  release-notes-path:
+    description: Optional path to release notes HTML.
+    required: false
+  r2-access-key-id:
+    required: true
+    description: R2 API token access key ID.
+  r2-secret-access-key:
+    required: true
+    description: R2 API token secret access key.
+  r2-account-id:
+    required: true
+    description: Cloudflare account ID.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        APPCAST_R2_ACCESS_KEY_ID: ${{ inputs.r2-access-key-id }}
+        APPCAST_R2_SECRET_ACCESS_KEY: ${{ inputs.r2-secret-access-key }}
+        APPCAST_R2_ACCOUNT_ID: ${{ inputs.r2-account-id }}
+      run: |
+        node "${{ github.action_path }}/../../scripts/update-appcast.mjs" \
+          --slug "${{ inputs.slug }}" \
+          --version "${{ inputs.version }}" \
+          --build-number "${{ inputs.build-number }}" \
+          --min-os-version "${{ inputs.min-os-version }}" \
+          --dmg-url "${{ inputs.dmg-url }}" \
+          --sparkle-signature "${{ inputs.sparkle-signature }}" \
+          --length "${{ inputs.length }}" \
+          --pub-date "${{ inputs.pub-date }}" \
+          --title "${{ inputs.title }}" \
+          ${{ inputs.release-notes-path && format('--release-notes-path "{0}"', inputs.release-notes-path) || '' }}
