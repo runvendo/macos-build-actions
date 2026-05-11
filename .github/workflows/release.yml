@@ -196,6 +196,13 @@ jobs:
             --jq '.assets[] | select(.name == "${{ steps.dmg.outputs.name }}") | .url')
           echo "dmg-url=$DMG_URL" >> "$GITHUB_OUTPUT"
 
+      - name: Compute RFC 822 pub-date
+        id: pubdate
+        shell: bash
+        run: |
+          # Sparkle's appcast spec requires RFC 822 pubDate. macOS date -R emits that exact format.
+          echo "value=$(date -R)" >> "$GITHUB_OUTPUT"
+
       - name: Update appcast
         uses: runvendo/macos-build-actions/actions/appcast-update@v1
         with:
@@ -206,7 +213,7 @@ jobs:
           dmg-url: ${{ steps.release.outputs.dmg-url }}
           sparkle-signature: ${{ steps.sparkle.outputs.signature }}
           length: ${{ steps.sparkle.outputs.length }}
-          pub-date: ${{ github.event.head_commit.timestamp }}
+          pub-date: ${{ steps.pubdate.outputs.value }}
           title: ${{ inputs.app-name }}
           release-notes-path: ${{ inputs.release-notes-path }}
           r2-access-key-id: ${{ secrets.APPCAST_R2_ACCESS_KEY_ID }}
