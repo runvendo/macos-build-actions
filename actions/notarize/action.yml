@@ -1,0 +1,64 @@
+name: Notarize artifact
+description: Submits a .app, .dmg, or .zip to Apple's notary service via xcrun notarytool, waits for the result, and on failure fetches the developer log URL.
+
+inputs:
+  artifact-path:
+    description: Path to the .app, .dmg, or .zip to submit.
+    required: true
+  api-key-p8-base64:
+    description: Base64-encoded App Store Connect API .p8 private key.
+    required: true
+  api-key-id:
+    description: ASC API Key ID (10-char).
+    required: true
+  api-issuer-id:
+    description: ASC API Issuer ID (UUID).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        ARTIFACT="${{ inputs.artifact-path }}"
+        KEY_PATH="$RUNNER_TEMP/asc-key.p8"
+
+        echo "${{ inputs.api-key-p8-base64 }}" | base64 --decode > "$KEY_PATH"
+
+        # notarytool needs a zip if the artifact is a .app; .dmg submits directly.
+        SUBMIT_PATH="$ARTIFACT"
+        if [[ "$ARTIFACT" == *.app ]]; then
+          SUBMIT_PATH="$RUNNER_TEMP/$(basename "$ARTIFACT").zip"
+          ditto -c -k --keepParent "$ARTIFACT" "$SUBMIT_PATH"
+        fi
+
+        set +e
+        OUT=$(xcrun notarytool submit "$SUBMIT_PATH" \
+          --key "$KEY_PATH" \
+          --key-id "${{ inputs.api-key-id }}" \
+          --issuer "${{ inputs.api-issuer-id }}" \
+          --wait --output-format json)
+        STATUS=$?
+        set -e
+
+        echo "$OUT" | tee "$RUNNER_TEMP/notarize.json"
+        rm -f "$KEY_PATH"
+
+        if [ "$STATUS" -ne 0 ]; then
+          SUBMISSION_ID=$(echo "$OUT" | jq -r '.id // empty')
+          if [ -n "$SUBMISSION_ID" ]; then
+            echo "::error::Notarization failed. Submission: $SUBMISSION_ID"
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --key "$RUNNER_TEMP/asc-key.p8" 2>/dev/null \
+              --key-id "${{ inputs.api-key-id }}" \
+              --issuer "${{ inputs.api-issuer-id }}" || true
+          fi
+          exit 1
+        fi
+
+        FINAL_STATUS=$(echo "$OUT" | jq -r '.status')
+        if [ "$FINAL_STATUS" != "Accepted" ]; then
+          echo "::error::Notarization status was $FINAL_STATUS"
+          exit 1
+        fi
