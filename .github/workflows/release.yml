@@ -47,6 +47,9 @@ on:
 jobs:
   release:
     runs-on: macos-15
+    concurrency:
+      group: macos-release-${{ inputs.app-slug }}
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
