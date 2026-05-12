@@ -57,6 +57,7 @@ runs:
         KEY_PATH="$RUNNER_TEMP/sparkle-ed.key"
         printf '%s' "$ED_PRIVATE_KEY" > "$KEY_PATH"
         chmod 600 "$KEY_PATH"
+        trap 'rm -f "$KEY_PATH"' EXIT
 
         # sign_update -f <key-file> <artifact> emits something like:
         #   sparkle:edSignature="..." length="12345"
@@ -70,8 +71,6 @@ runs:
           echo "::error::Failed to parse sign_update output"
           exit 1
         fi
-
-        rm -f "$KEY_PATH"
 
         echo "::add-mask::$SIG"
         echo "signature=$SIG" >> "$GITHUB_OUTPUT"

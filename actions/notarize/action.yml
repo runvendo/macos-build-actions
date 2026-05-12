@@ -30,6 +30,7 @@ runs:
         KEY_PATH="$RUNNER_TEMP/asc-key.p8"
 
         printf '%s' "$API_KEY_B64" | base64 --decode > "$KEY_PATH"
+        trap 'rm -f "$KEY_PATH"' EXIT
 
         # notarytool needs a zip if the artifact is a .app; .dmg submits directly.
         SUBMIT_PATH="$ARTIFACT"
@@ -80,7 +81,6 @@ runs:
             echo "::error::Notarization failed. Submission: $SUBMISSION_ID"
             emit_failure_summary "$SUBMISSION_ID" "$(echo "$OUT" | jq -r '.status // "unknown"')"
           fi
-          rm -f "$KEY_PATH"
           exit 1
         fi
 
@@ -93,8 +93,5 @@ runs:
           else
             echo "::error::Notarization status was $FINAL_STATUS"
           fi
-          rm -f "$KEY_PATH"
           exit 1
         fi
-
-        rm -f "$KEY_PATH"
