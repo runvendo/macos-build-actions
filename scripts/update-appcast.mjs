@@ -106,7 +106,7 @@ async function s3Request(method, key, body = "", contentType = "") {
   const service = "s3";
 
   const payloadHash = createHash("sha256").update(body).digest("hex");
-  const canonicalUri = `/${BUCKET}/${key}`;
+  const canonicalUri = '/' + [BUCKET, ...key.split('/')].map(encodeURIComponent).join('/');
   const canonicalQuery = "";
   const headers = {
     host: HOST,
