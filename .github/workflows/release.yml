@@ -77,12 +77,14 @@ jobs:
         shell: bash
         env:
           APP_SLUG: ${{ inputs.app-slug }}
+          BUNDLE_ID: ${{ inputs.bundle-id }}
           SPARKLE_PUB: ${{ inputs.sparkle-public-key }}
         run: |
           {
             echo "## Sparkle public key (audit)"
             echo ""
             echo "App slug: \`$APP_SLUG\`"
+            echo "Bundle ID: \`$BUNDLE_ID\`"
             echo "Public EdDSA key: \`$SPARKLE_PUB\`"
             echo ""
             echo "If this does not match \`SUPublicEDKey\` in the app's Info.plist, the resulting Sparkle update will be rejected by installed clients."
