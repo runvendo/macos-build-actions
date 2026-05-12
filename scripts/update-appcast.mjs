@@ -77,7 +77,11 @@ function prependItem(xml, it) {
       <enclosure url="${escapeXml(it.url)}" sparkle:edSignature="${escapeXml(it.signature)}" length="${escapeXml(String(it.length))}" type="application/octet-stream"/>
     </item>
 `;
-  return xml.replace(/(<channel>[\s\S]*?<\/title>\s*)/, `$1\n${item}`);
+  const result = xml.replace(/(<channel>[\s\S]*?<\/title>\s*)/, `$1\n${item}`);
+  if (result === xml) {
+    throw new Error("appcast template did not match expected shape; refusing to write");
+  }
+  return result;
 }
 
 function escapeXml(s) {
