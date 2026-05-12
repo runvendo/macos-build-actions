@@ -237,8 +237,10 @@ jobs:
         id: pubdate
         shell: bash
         run: |
-          # Sparkle's appcast spec requires RFC 822 pubDate. macOS date -R emits that exact format.
-          echo "value=$(date -R)" >> "$GITHUB_OUTPUT"
+          # Sparkle's appcast spec requires RFC 822 pubDate. macOS date -R emits that
+          # exact format only under a C locale; pin LC_TIME so day/month names are not
+          # localized into something Sparkle won't parse.
+          echo "value=$(LC_TIME=C date -R)" >> "$GITHUB_OUTPUT"
 
       - name: Update appcast
         uses: runvendo/macos-build-actions/actions/appcast-update@v1
